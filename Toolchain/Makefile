@@ -145,7 +145,7 @@ else
 endif
 
 
-TARGET_LIBC := newlib
+TARGET_LIBC := picolibc
 
 ifneq "$(TARGET_LIBC)" "newlib"
   ifneq "$(TARGET_LIBC)" "picolibc"
@@ -242,7 +242,7 @@ HOST_FLAGS_WITH_OPT_AND_LTO := CFLAGS="$(HF_COMMON) $(HF_OPT) $(HF_LTO)" CXXFLAG
 
 ENABLE_DEBUG_TOOLCHAIN := 0
 
-TOOLCHAIN_TARGET_CPU := cortex-m3
+TOOLCHAIN_TARGET_CPU := pic32mm
 
 # Not really used, see below for more information.
 CONFIGURE_CACHE_FILENAME := $(CROSS_TOOLCHAIN_BUILD_DIR)/build-toolchain-local-cache-file.cache
@@ -272,7 +272,7 @@ SHOULD_WARN_ABOUT_REBUILDING_SOFTWARE := 1
 
 # ------- Miscellaneous definitions -------
 
-TARGET_ARCH := arm-none-eabi
+TARGET_ARCH := mips-mti-elf
 
 PATH_DIR = $(CROSS_TOOLCHAIN_DIR)/bin
 
@@ -347,12 +347,19 @@ FLAGS_NO_HARDWARE_FP := --without-fp --with-float=soft
 ifeq ($(TOOLCHAIN_TARGET_CPU), cortex-m0)
   COMMON_CFLAGS_FOR_TARGET += -mcpu=cortex-m0 -mthumb
   GCC_FLOATING_POINT_FLAGS := $(FLAGS_NO_HARDWARE_FP)
+  TARGET_PICOLIBC_CPU_FAMILY := arm
 else ifeq ($(TOOLCHAIN_TARGET_CPU), cortex-m3)
   COMMON_CFLAGS_FOR_TARGET += -mcpu=cortex-m3 -mthumb
   GCC_FLOATING_POINT_FLAGS := $(FLAGS_NO_HARDWARE_FP)
+  TARGET_PICOLIBC_CPU_FAMILY := arm
 else ifeq ($(TOOLCHAIN_TARGET_CPU), cortex-m4f)
   COMMON_CFLAGS_FOR_TARGET += -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
   GCC_FLOATING_POINT_FLAGS := # No flags needed here.
+  TARGET_PICOLIBC_CPU_FAMILY := arm
+else ifeq ($(TOOLCHAIN_TARGET_CPU), pic32mm)
+  COMMON_CFLAGS_FOR_TARGET += -march=m14ke -mmicromips -mabi=32 -mgp32 -EL
+  GCC_FLOATING_POINT_FLAGS := $(FLAGS_NO_HARDWARE_FP)
+  TARGET_PICOLIBC_CPU_FAMILY := mips
 else
   $(error Variable TOOLCHAIN_TARGET_CPU has invalid value "$(TOOLCHAIN_TARGET_CPU)")
 endif
@@ -949,7 +956,7 @@ ifeq ($(TARGET_LIBC), picolibc)
   PICOLIBC_CFG_FLAGS += -Dnewlib-global-atexit=true
 
   # The Meson build system documents all supported CPU family names.
-  PICOLIBC_CPU_FAMILY := arm
+  PICOLIBC_CPU_FAMILY := $(TARGET_PICOLIBC_CPU_FAMILY)
   PICOLIBC_CPU_ENDIANNESS := little
 
   PICOLIBC_C_FLAGS_FOR_TARGET := $(COMMON_CFLAGS_FOR_TARGET) $(COMMON_CFLAGS_FOR_LIBC)
