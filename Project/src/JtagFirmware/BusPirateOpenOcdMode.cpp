@@ -33,7 +33,7 @@
 
 #define OPEN_OCD_CMD_CODE_LEN         1
 #define TAP_SHIFT_CMD_HEADER_LEN      ( uint32_t( OPEN_OCD_CMD_CODE_LEN + 2 ) )
-#define MAX_JTAG_TAP_SHIFT_BIT_COUNT  ( uint32_t( ( USB_RX_BUFFER_SIZE - TAP_SHIFT_CMD_HEADER_LEN ) / 2 * 8  ) )
+#define MAX_JTAG_TAP_SHIFT_BIT_COUNT  ( ( USB_RX_BUFFER_SIZE - TAP_SHIFT_CMD_HEADER_LEN ) / 2 * 8 )
 
 
 #ifndef NDEBUG
@@ -774,7 +774,7 @@ static bool ShiftCommand ( CUsbRxBuffer * const rxBuffer,
   }
 
 
-  const unsigned dataByteCount = ( dataBitCount + 7 ) / 8;
+  const unsigned dataByteCount = unsigned( ( dataBitCount + 7 ) / 8 );
   const uint32_t cmdLen   = TAP_SHIFT_CMD_HEADER_LEN + dataByteCount * 2;
   const uint32_t replyLen = TAP_SHIFT_CMD_HEADER_LEN + dataByteCount;
 

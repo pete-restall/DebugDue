@@ -43,27 +43,34 @@ static bool DoesStrMatch ( const char * const strBegin,
                            const char * const match,
                            const bool isCaseSensitive )
 {
-  const size_t len = strEnd - strBegin;
-  assert( len > 0 );
+  assert( strEnd >= strBegin );
+
+  const size_t len = size_t( strEnd - strBegin );
 
   size_t i;
   for ( i = 0; i < len; ++i )
   {
     const char m = match[ i ];
+
     if ( m == 0 )
       return false;
 
     const char c = strBegin[ i ];
+
     assert( c != 0 );
 
     // Otherwise, toupper() may not be reliable.
     assert( IsPrintableAscii( m ) );
 
     if ( c == m )
+    {
       continue;
+    }
 
     if ( !isCaseSensitive && toupper( c ) == toupper( m ) )
+    {
       continue;
+    }
 
     return false;
   }
@@ -387,7 +394,7 @@ void CCommandProcessor::DisplayCpuLoad ( void )
   {
     const unsigned index = ( lastMinuteIndex + j ) % CPU_LOAD_LONG_PERIOD_SLOT_COUNT;
 
-    const uint32_t val = lastMinute[ index ] * 100 / 255;
+    const uint32_t val = uint32_t( lastMinute[ index ] * 100 / 255 );
 
     assert( val <= 100 );
 
@@ -414,7 +421,7 @@ void CCommandProcessor::DisplayCpuLoad ( void )
   {
     const unsigned index = ( lastSecondIndex + j ) % CPU_LOAD_SHORT_PERIOD_SLOT_COUNT;
 
-    const uint32_t val = lastSecond[ index ] * 100 / 255;
+    const uint32_t val = uint32_t( lastSecond[ index ] * 100 / 255 );
 
     assert( val <= 100 );
 
@@ -736,8 +743,8 @@ void CCommandProcessor::ParseCommand ( const char * const cmdBegin,
 
   if ( IsCmd( cmdBegin, cmdEnd, CMDNAME_MEMORY_USAGE, false, false, &extraParamsFound ) )
   {
-    const unsigned stackAreaSize = unsigned( uintptr_t( &__StackTop  ) - uintptr_t( &__StackLimit ) );
-    const unsigned heapAreaSize  = unsigned( uintptr_t( &__HeapLimit ) - uintptr_t( &__end__      ) );
+    const unsigned stackAreaSize = uintptr_t( &__StackTop  ) - uintptr_t( &__StackLimit );
+    const unsigned heapAreaSize  = uintptr_t( &__HeapLimit ) - uintptr_t( &__end__      );
 
     Printf( "Used stack (estimated): %zu from %u bytes." EOL,
              GetStackSizeUsageEstimate(),

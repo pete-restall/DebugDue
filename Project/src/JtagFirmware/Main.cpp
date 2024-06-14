@@ -47,7 +47,7 @@
 const uint32_t WATCHDOG_PERIOD_MS = 1000;
 
 #ifndef NDEBUG
-  static const size_t MIN_UNUSED_STACK_SIZE = MaxFrom( MaxFrom( ASSERT_MSG_BUFSIZE, MAX_SERIAL_PRINT_LEN ), MAX_USB_PRINT_LEN ) + 200;
+  static const size_t MIN_UNUSED_STACK_SIZE = size_t( MaxFrom( MaxFrom( ASSERT_MSG_BUFSIZE, MAX_SERIAL_PRINT_LEN ), MAX_USB_PRINT_LEN ) + 200 );
 #endif
 
 
@@ -224,7 +224,7 @@ void StartOfUserCode ( void )
       SerialPrintf( "Stack entering main loop: current depth: %zu, estimated usage %zu, max room %u bytes." EOL,
                     GetCurrentStackDepth(),
                     GetStackSizeUsageEstimate(),
-                    STACK_SIZE );
+                    unsigned( STACK_SIZE ) );
 
     }
 

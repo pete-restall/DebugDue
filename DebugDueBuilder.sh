@@ -1425,6 +1425,8 @@ check_open_ocd_version ()
 {
   # OpenOCD versions older than 0.10.0 will probably not work well.
   local -r OPENOCD_MINIMUM_VERSION="0.10.0"
+  local -r OPENOCD_VERSION_0_11_0="0.11.0"
+  local -r OPENOCD_VERSION_0_12_0="0.12.0"
 
   echo "Checking that OpenOCD is at least version $OPENOCD_MINIMUM_VERSION..."
 
@@ -1457,7 +1459,32 @@ check_open_ocd_version ()
 
   echo "OpenOCD version found: $OPENOCD_VERSION_NUMBER_FOUND"
 
-  declare -r CHECK_VERSION_TOOL="$DEBUGDUE_ROOT_DIR/Tools/CheckVersion.sh"
+  local -r CHECK_VERSION_TOOL="$DEBUGDUE_ROOT_DIR/Tools/CheckVersion.sh"
+
+
+  local IS_VER_0_12_0_OR_HIGHER_BOOL
+
+  IS_VER_0_12_0_OR_HIGHER_BOOL="$("$CHECK_VERSION_TOOL" --result-as-text "OpenOCD" "$OPENOCD_VERSION_NUMBER_FOUND" ">=" "$OPENOCD_VERSION_0_12_0")"
+
+  case "$IS_VER_0_12_0_OR_HIGHER_BOOL" in
+    true)  IS_OPEN_OCD_VERSION_0_11_0_OR_HIGHER=true
+           IS_OPEN_OCD_VERSION_0_12_0_OR_HIGHER=true
+           return;;
+    false) IS_OPEN_OCD_VERSION_0_12_0_OR_HIGHER=false;;
+    *) abort "Tool \"$CHECK_VERSION_TOOL\" returned invalid answer \"$IS_VER_0_12_0_OR_HIGHER_BOOL\"."
+  esac
+
+
+  local IS_VER_0_11_0_OR_HIGHER_BOOL
+
+  IS_VER_0_11_0_OR_HIGHER_BOOL="$("$CHECK_VERSION_TOOL" --result-as-text "OpenOCD" "$OPENOCD_VERSION_NUMBER_FOUND" ">=" "$OPENOCD_VERSION_0_11_0")"
+
+  case "$IS_VER_0_11_0_OR_HIGHER_BOOL" in
+    true)  IS_OPEN_OCD_VERSION_0_11_0_OR_HIGHER=true
+           return;;
+    false) IS_OPEN_OCD_VERSION_0_11_0_OR_HIGHER=false;;
+    *) abort "Tool \"$CHECK_VERSION_TOOL\" returned invalid answer \"$IS_VER_0_11_0_OR_HIGHER_BOOL\"."
+  esac
 
   "$CHECK_VERSION_TOOL" "OpenOCD" "$OPENOCD_VERSION_NUMBER_FOUND" ">=" "$OPENOCD_MINIMUM_VERSION"
 }
@@ -1478,6 +1505,18 @@ do_program_and_debug ()
     quote_and_append_args OPEN_OCD_CMD "--debug=3"
   fi
 
+  if $IS_OPEN_OCD_VERSION_0_11_0_OR_HIGHER; then
+    add_openocd_cmd "set ::DebugDue_IsOpenOcdVersion_0_11_0_OrHigher 1"
+  else
+    add_openocd_cmd "set ::DebugDue_IsOpenOcdVersion_0_11_0_OrHigher 0"
+  fi
+
+  if $IS_OPEN_OCD_VERSION_0_12_0_OR_HIGHER; then
+    add_openocd_cmd "set ::DebugDue_IsOpenOcdVersion_0_12_0_OrHigher 1"
+  else
+    add_openocd_cmd "set ::DebugDue_IsOpenOcdVersion_0_12_0_OrHigher 0"
+  fi
+
   # OpenOCD's documentation states the following:
   #   By default, OpenOCD will listen on the loopback interface only.
   # But my OpenOCD version 0.10.0 is listening on all IP addresses, which makes it a security risk.
@@ -1488,23 +1527,67 @@ do_program_and_debug ()
     DebugDue)
       printf -v TMP_STR  "set DEBUGDUE_SERIAL_PORT %q"  "$DEBUGDUE_SERIAL_PORT"
       add_openocd_cmd "$TMP_STR"
-      quote_and_append_args OPEN_OCD_CMD "-f" "$OPENOCD_CONFIG_DIR/DebugDueInterfaceConfig.cfg"
+      quote_and_append_args OPEN_OCD_CMD "--file" "$OPENOCD_CONFIG_DIR/DebugDueInterfaceConfig.tcl"
       ;;
+
     Flyswatter2)
-      quote_and_append_args OPEN_OCD_CMD  "-f" "interface/ftdi/flyswatter2.cfg"
+      quote_and_append_args OPEN_OCD_CMD  "--file" "interface/ftdi/flyswatter2.cfg"
+
+      # TDO is actually valid on the falling edge of the clock.
+      if $IS_OPEN_OCD_VERSION_0_12_0_OR_HIGHER; then
+        add_openocd_cmd "ftdi tdo_sample_edge falling"
+      else
+        add_openocd_cmd "ftdi_tdo_sample_edge falling"
+      fi
       ;;
+
     Olimex-ARM-USB-OCD-H)
-      quote_and_append_args OPEN_OCD_CMD  "-f" "interface/ftdi/olimex-arm-usb-ocd-h.cfg"
+      quote_and_append_args OPEN_OCD_CMD  "--file" "interface/ftdi/olimex-arm-usb-ocd-h.cfg"
+
+      # Prevent the following log information line by explicitly selecting the transport here.
+      #   Info : auto-selecting first available session transport "jtag". To override use 'transport select <transport>'.
+      add_openocd_cmd "transport select jtag"
+
+      # TDO is actually valid on the falling edge of the clock.
+      if $IS_OPEN_OCD_VERSION_0_12_0_OR_HIGHER; then
+        add_openocd_cmd "ftdi tdo_sample_edge falling"
+      else
+        add_openocd_cmd "ftdi_tdo_sample_edge falling"
+      fi
       ;;
+
     *) abort "Invalid DEBUG_ADAPTER value of \"$DEBUG_ADAPTER\"." ;;
   esac
 
-  quote_and_append_args OPEN_OCD_CMD "-f" "target/at91sam3ax_8x.cfg"
+  quote_and_append_args OPEN_OCD_CMD "--file" "target/at91sam3ax_8x.cfg"
 
-  quote_and_append_args OPEN_OCD_CMD "-f" "$OPENOCD_CONFIG_DIR/OpenOcdJtagConfig.cfg"
+  quote_and_append_args OPEN_OCD_CMD "--file" "$OPENOCD_CONFIG_DIR/OpenOcdJtagConfig.tcl"
 
-  # Set the JTAG clock speed. If you try to set it speed earlier, it gets overridden
+  # Set the JTAG clock speed. If you try to set the speed earlier, it gets overridden
   # back to 500 KHz, at least with the Flyswatter2.
+  #
+  # About the connection speed:
+  #   The maximum JTAG speed for this kind of microcontroller is F_CPU/6.
+  #   The SAM3X starts at 4 MHz upon reset, so that maximum JTAG speed on start-up is 666 kHz.
+  #   However, the standard OpenOCD configuration sets the JTAG speed to 500 kHz,
+  #   because the internal oscillator may not be very accurate.
+  #   The flash write speed is then around 13 kBytes/s.
+  #   We could increase the CPU clock temporarily before flashing the firmware in order to save time.
+  #
+  #   If the CPU is running at the normal speed of 84 MHz, the maximum JTAG clock would be 14 MHz then.
+  #   If the firmware from this project has been programmed already, you can use that maximum speed,
+  #   because the firmware increases F_CPU to 84 MHz on start-up before the short pause
+  #   for the eventual OpenOCD connection. There are some gotchas though:
+  #   - We cannot be sure that the firmware has actually increased the CPU clock.
+  #   - We are resetting now with software (instead of with the hardware SRST signal),
+  #     so the firmware will not run at all upon reset.
+  #
+  #   Note that high speeds may not be reliable, especially if you use non-professional cables.
+  #   You can use command-line option '--verify' (at the cost of a short extra delay)
+  #   to make sure that you can trust your setup.
+  #   Speeds over 10 MHz do not really bring any advantage, as the Flash memory becomes then the bottleneck.
+  local -r -i ADAPTER_SPEED_KHZ="500"
+
   case "$DEBUG_ADAPTER" in
 
     DebugDue)
@@ -1527,37 +1610,21 @@ do_program_and_debug ()
       #   I guess that Cortex-M3 does not have it either.
       #
       #  The JTAG connector on the Arduino Due, a 10-Pin Cortex Debug Connector, does not have a RTCK/RCLK pin.
-      #
-      # About the connection speed:
-      #
-      #   The maximum JTAG speed for this kind of chip is F_CPU/6. If the CPU is running at the normal speed of 84 MHz,
-      #   the maximum JTAG clock would be 14 MHz then. Note however that the SAM3X starts at 4 MHz upon reset,
-      #   so that maximum speed is 666 kHz.
-      #
-      #   If the firmware from this project has been programmed already, you can use the maximum speed,
-      #   because the firmware increases F_CPU to 84 MHz on start-up before the short pause
-      #   for the eventual OpenOCD connection.
-      #   Otherwise, you have the following options:
-      #   - Lower the speed to to 666 kHz, which makes programming and debugging slow.
-      #   - Program a first firmware version with tool 'bossac', which does the programming with the help of
-      #     the small ATmega16U2 AVR microcontroller next to the main Atmel SAM9XE microcontroller.
-      #   - Implement some clever OpenOCD logic (in Jim Tcl, triggered from this script) in order
-      #     to check the current CPU speed and increase the debug adapter speed accordingly.
-      #
-      #   High speeds may not be reliable, especially if you use non-professional cables.
-      #   You can use command-line option '--verify' (at the cost of a short extra delay)
-      #   to make sure that you can trust your setup.
-      #   Speeds over 10 MHz do not really bring any advantage, as the Flash memory becomes then the bottleneck.
-      add_openocd_cmd "adapter_khz 10000"
-
-      # Explicitly select JTAG, just in case.
-      add_openocd_cmd "transport select jtag"
+      if $IS_OPEN_OCD_VERSION_0_11_0_OR_HIGHER; then
+        add_openocd_cmd "adapter speed $ADAPTER_SPEED_KHZ"
+      else
+        add_openocd_cmd "adapter_khz $ADAPTER_SPEED_KHZ"
+      fi
       ;;
 
     Flyswatter2)
       # Enabling RTCK/RCLK (with "adapter_khz 0") makes the Adapter hang.
       # See the notes above in the Olimex-ARM-USB-OCD-H section for more information about the debug adapter speed.
-      add_openocd_cmd "adapter_khz 10000"
+      if $IS_OPEN_OCD_VERSION_0_11_0_OR_HIGHER; then
+        add_openocd_cmd "adapter speed $ADAPTER_SPEED_KHZ"
+      else
+        add_openocd_cmd "adapter_khz $ADAPTER_SPEED_KHZ"
+      fi
       ;;
 
     *) abort "Invalid DEBUG_ADAPTER value of \"$DEBUG_ADAPTER\"." ;;
